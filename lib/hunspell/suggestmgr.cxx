@@ -527,7 +527,7 @@ int SuggestMgr::replchars(std::vector<std::string>& wlst,
       testsug(wlst, candidate, cpdsuggest, nullptr, nullptr, info);
       if (oldns < wlst.size()) {
         // REP suggestions are the best, don't search other type of suggestions
-        info |= SPELL_BEST_SUG;
+        // info |= SPELL_BEST_SUG; // disabled: keep all suggestion types
       }
 
       // check REP suggestions with space
@@ -877,7 +877,7 @@ bool SuggestMgr::twowords(std::vector<std::string>& wlst,
     *p = ' ';
     if (!cpdsuggest && checkword(candidate, cpdsuggest, nullptr, nullptr)) {
       // best solution
-      info |= SPELL_BEST_SUG;
+      // info |= SPELL_BEST_SUG; // disabled: keep all suggestion types
 
       // remove not word pair suggestions
       if (!good) {
@@ -894,7 +894,7 @@ bool SuggestMgr::twowords(std::vector<std::string>& wlst,
 
       if (!cpdsuggest && checkword(candidate, cpdsuggest, nullptr, nullptr)) {
         // best solution
-        info |= SPELL_BEST_SUG;
+        // info |= SPELL_BEST_SUG; // disabled: keep all suggestion types
 
         // remove not word pair suggestions
         if (!good) {
