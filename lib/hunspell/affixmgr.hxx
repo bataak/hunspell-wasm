@@ -73,7 +73,6 @@
 
 #include <cstdio>
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -95,12 +94,12 @@ class AffixMgr {
   SfxEntry* sStart[SETSIZE];
   PfxEntry* pFlag[SETSIZE];
   SfxEntry* sFlag[SETSIZE];
-  const std::vector<std::unique_ptr<HashMgr>>& alldic;
+  const std::vector<HashMgr*>& alldic;
   const HashMgr* pHMgr;
   std::string keystring;
   std::string trystring;
   std::string encoding;
-  const struct cs_info* csconv;
+  struct cs_info* csconv;
   int utf8;
   int complexprefixes;
   FLAG compoundflag;
@@ -157,7 +156,7 @@ class AffixMgr {
   std::string ignorechars; // letters + spec. word characters
   std::vector<w_char> ignorechars_utf16;
   std::string version;   // affix and dictionary file version string
-  std::string lang; // language
+  std::string lang;	 // language
   int langnum;
   FLAG lemma_present;
   FLAG circumfix;
@@ -175,7 +174,7 @@ class AffixMgr {
                                // affix)
 
  public:
-  AffixMgr(const char* affpath, const std::vector<std::unique_ptr<HashMgr>>& ptr, const char* key = nullptr);
+  AffixMgr(const char* affpath, const std::vector<HashMgr*>& ptr, const char* key = NULL);
   ~AffixMgr();
   struct hentry* affix_check(const std::string& word,
                              int start,
@@ -262,19 +261,18 @@ class AffixMgr {
   int cpdrep_check(const std::string& word, int len);
   int cpdwordpair_check(const std::string& word, int len);
   int cpdpat_check(const std::string& word,
-                   size_t len,
+                   int len,
                    hentry* r1,
                    hentry* r2,
                    const char affixed);
   int defcpd_check(hentry*** words,
                    short wnum,
-                   short maxwordnum,
                    hentry* rv,
                    hentry** rwords,
                    char all);
   int cpdcase_check(const std::string& word, int len);
   inline int candidate_check(const std::string& word);
-  void setcminmax(size_t* cmin, size_t* cmax, const char* word, size_t len);
+  void setcminmax(int* cmin, int* cmax, const char* word, int len);
   struct hentry* compound_check(const std::string& word,
                                 short wordnum,
                                 short numsyllable,
@@ -335,12 +333,12 @@ class AffixMgr {
   int get_maxdiff() const;
   int get_onlymaxdiff() const;
   int get_nosplitsugs() const;
-  int get_sugswithdots() const;
-  FLAG get_keepcase() const;
-  FLAG get_forceucase() const;
-  FLAG get_warn() const;
-  int get_forbidwarn() const;
-  int get_checksharps() const;
+  int get_sugswithdots(void) const;
+  FLAG get_keepcase(void) const;
+  FLAG get_forceucase(void) const;
+  FLAG get_warn(void) const;
+  int get_forbidwarn(void) const;
+  int get_checksharps(void) const;
   std::string encode_flag(unsigned short aflag) const;
   int get_fullstrip() const;
 

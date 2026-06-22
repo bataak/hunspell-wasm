@@ -96,7 +96,7 @@ class HashMgr {
   int langnum;
   std::string enc;
   std::string lang;
-  const struct cs_info* csconv;
+  struct cs_info* csconv;
   std::string ignorechars;
   std::vector<w_char> ignorechars_utf16;
   std::vector<unsigned short*> aliasf; // flag vector `compression' with aliases
@@ -108,7 +108,7 @@ class HashMgr {
   std::vector<replentry> reptable;
 
  public:
-  HashMgr(const char* tpath, const char* apath, const char* key = nullptr);
+  HashMgr(const char* tpath, const char* apath, const char* key = NULL);
   ~HashMgr();
 
   struct hentry* lookup(const char* word, size_t len) const;
@@ -116,7 +116,6 @@ class HashMgr {
   struct hentry* walk_hashtable(int& col, struct hentry* hp) const;
 
   int add(const std::string& word);
-  int add_with_flags(const std::string& word, const std::string& flags, const std::string& desc = "");
   int add_with_affix(const std::string& word, const std::string& pattern);
   int remove(const std::string& word);
   int decode_flags(unsigned short** result, const std::string& flags, FileMgr* af) const;
@@ -139,8 +138,7 @@ class HashMgr {
                int al,
                const std::string* desc,
                bool onlyupcase,
-               int captype,
-               bool own_aff);
+               int captype);
   int load_config(const char* affpath, const char* key);
   bool parse_aliasf(const std::string& line, FileMgr* af);
   int add_hidden_capitalized_word(const std::string& word,
@@ -151,9 +149,9 @@ class HashMgr {
                                   int captype);
   bool parse_aliasm(const std::string& line, FileMgr* af);
   bool parse_reptable(const std::string& line, FileMgr* af);
-  void remove_forbidden_flag(const std::string& word);
+  int remove_forbidden_flag(const std::string& word);
   void free_table();
-  void release_flags(unsigned short* astr, bool owned);
+  void free_flag(unsigned short* astr, short alen);
 };
 
 #endif
