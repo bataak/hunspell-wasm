@@ -68,6 +68,7 @@
  * SUCH DAMAGE.
  */
 
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -1198,6 +1199,15 @@ void SuggestMgr::ngsuggest(std::vector<std::string>& wlst,
   std::string f;
   std::vector<w_char> w_f;
 
+  const int wl = (int)w_word.size();
+  const bool prune = utf8 && !ph && !nonbmp && wl > 0 && wl <= 64;
+  std::vector<uint64_t> charmask;
+  if (prune) {
+    charmask.assign(65536, 0);
+    for (int k = 0; k < wl; ++k)
+      charmask[(unsigned short)w_word[k]] |= (uint64_t)1 << k;
+  }
+
   for (size_t i = 0; i < rHMgr.size(); ++i) {
     while (0 != (hp = rHMgr[i]->walk_hashtable(col, hp))) {
       // skip exceptions
@@ -1231,6 +1241,19 @@ void SuggestMgr::ngsuggest(std::vector<std::string>& wlst,
         if (low) {
           // lowering dictionary word
           mkallsmall_utf(w_f, langnum);
+        }
+        if (prune && !(hp->var & H_OPT_PHON) && !w_f.empty()) {
+          uint64_t found = 0;
+          for (size_t k = 0; k < w_f.size(); ++k)
+            found |= charmask[(unsigned short)w_f[k]];
+          int bound = __builtin_popcountll(found) +
+                      __builtin_popcountll(found & (found >> 1)) +
+                      __builtin_popcountll(found & (found >> 1) & (found >> 2));
+          int longer = (int)w_f.size() - wl - 2;
+          if (longer > 0)
+            bound -= longer;
+          if (bound + leftcommon <= scores[lp])
+            continue;
         }
         sc = ngram(3, w_word, w_f, NGRAM_LONGER_WORSE) + leftcommon;
       } else {
