@@ -97,6 +97,7 @@ AffixMgr::AffixMgr(const char* affpath,
   utf8 = 0;
   complexprefixes = 0;
   parsedmaptable = false;
+  parsedcmaptable = false;
   parsedbreaktable = false;
   iconvtable = NULL;
   oconvtable = NULL;
@@ -584,6 +585,14 @@ int AffixMgr::parse_file(const char* affpath, const char* key) {
     /* parse in the defcompound table */
     if (line.compare(0, 12, "COMPOUNDRULE", 12) == 0) {
       if (!parse_defcpdtable(line, afflst)) {
+        finishFileMgr(afflst);
+        return 1;
+      }
+    }
+
+    /* parse in the consistent (vowel-harmony) map table */
+    if (line.compare(0, 4, "CMAP", 4) == 0) {
+      if (!parse_cmaptable(line, afflst)) {
         finishFileMgr(afflst);
         return 1;
       }
@@ -3512,6 +3521,11 @@ const std::vector<mapentry>& AffixMgr::get_maptable() const {
   return maptable;
 }
 
+// return consistent map table
+const std::vector<mapentry>& AffixMgr::get_cmaptable() const {
+  return cmaptable;
+}
+
 // return character map table
 const std::vector<std::string>& AffixMgr::get_breaktable() const {
   return breaktable;
@@ -4245,6 +4259,93 @@ bool AffixMgr::parse_maptable(const std::string& line, FileMgr* af) {
     if (maptable.back().empty()) {
       HUNSPELL_WARNING(stderr, "error: line %d: table is corrupt\n",
                        af->getlinenum());
+      return false;
+    }
+  }
+  return true;
+}
+
+/* parse in the consistent map table
+ *
+ *   CMAP <number of rows>
+ *   CMAP <unit_1> <unit_2> ... <unit_k>
+ *
+ * Every row is one alternation class (e.g. one vowel-harmony class) and every
+ * column one alternating unit; units are separated by whitespace and may be
+ * longer than one character. All rows must have the same number of columns.
+ * Example (Mongolian):
+ *   CMAP 4
+ *   CMAP а у ы
+ *   CMAP э ү ий
+ *   CMAP о у ы
+ *   CMAP ө ү ий
+ */
+bool AffixMgr::parse_cmaptable(const std::string& line, FileMgr* af) {
+  if (parsedcmaptable) {
+    HUNSPELL_WARNING(stderr, "error: line %d: multiple table definitions\n",
+                     af->getlinenum());
+    return false;
+  }
+  parsedcmaptable = true;
+  int numrows = -1;
+  int i = 0;
+  int np = 0;
+  auto iter = line.begin(), start_piece = mystrsep(line, iter);
+  while (start_piece != line.end()) {
+    switch (i) {
+      case 0:
+        np++;
+        break;
+      case 1:
+        numrows = atoi(std::string(start_piece, iter).c_str());
+        if (numrows < 1) {
+          HUNSPELL_WARNING(stderr, "error: line %d: bad entry number\n",
+                           af->getlinenum());
+          return false;
+        }
+        cmaptable.reserve(std::min(numrows, 1024));
+        np++;
+        break;
+      default:
+        break;
+    }
+    ++i;
+    start_piece = mystrsep(line, iter);
+  }
+  if (np != 2) {
+    HUNSPELL_WARNING(stderr, "error: line %d: missing data\n",
+                     af->getlinenum());
+    return false;
+  }
+
+  for (int j = 0; j < numrows; ++j) {
+    std::string nl;
+    if (!af->getline(nl))
+      return false;
+    mychomp(nl);
+    cmaptable.emplace_back();
+    i = 0;
+    iter = nl.begin();
+    start_piece = mystrsep(nl, iter);
+    while (start_piece != nl.end()) {
+      if (i == 0) {
+        if (nl.compare(start_piece - nl.begin(), 4, "CMAP", 4) != 0) {
+          HUNSPELL_WARNING(stderr, "error: line %d: table is corrupt\n",
+                           af->getlinenum());
+          cmaptable.clear();
+          return false;
+        }
+      } else {
+        cmaptable.back().emplace_back(start_piece, iter);
+      }
+      ++i;
+      start_piece = mystrsep(nl, iter);
+    }
+    if (cmaptable.back().empty() ||
+        cmaptable.back().size() != cmaptable.front().size()) {
+      HUNSPELL_WARNING(stderr, "error: line %d: table is corrupt\n",
+                       af->getlinenum());
+      cmaptable.clear();
       return false;
     }
   }

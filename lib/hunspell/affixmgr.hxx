@@ -124,6 +124,8 @@ class AffixMgr {
   RepList* oconvtable;
   bool parsedmaptable;
   std::vector<mapentry> maptable;
+  bool parsedcmaptable;
+  std::vector<mapentry> cmaptable;  // rows = classes, columns = alternating units
   bool parsedbreaktable;
   std::vector<std::string> breaktable;
   bool parsedcheckcpd;
@@ -305,6 +307,7 @@ class AffixMgr {
   RepList* get_oconvtable() const;
   struct phonetable* get_phonetable() const;
   const std::vector<mapentry>& get_maptable() const;
+  const std::vector<mapentry>& get_cmaptable() const;
   const std::vector<std::string>& get_breaktable() const;
   const std::string& get_encoding();
   int get_langnum() const;
@@ -353,6 +356,7 @@ class AffixMgr {
                       const std::string& keyword);
   bool parse_phonetable(const std::string& line, FileMgr* af);
   bool parse_maptable(const std::string& line, FileMgr* af);
+  bool parse_cmaptable(const std::string& line, FileMgr* af);
   bool parse_breaktable(const std::string& line, FileMgr* af);
   bool parse_checkcpdtable(const std::string& line, FileMgr* af);
   bool parse_defcpdtable(const std::string& line, FileMgr* af);

@@ -239,6 +239,15 @@ bool SuggestMgr::suggest(std::vector<std::string>& slst,
         good_suggestion = true;
     }
 
+    // perhaps we broke a consistent alternation (e.g. vowel harmony):
+    // linear-size candidate set, so it runs before the REP table
+    if ((slst.size() < maxSug) && (!cpdsuggest || (slst.size() < oldSug + maxcpdsugs))) {
+      size_t i = slst.size();
+      cmapchars(slst, word, cpdsuggest, info);
+      if (slst.size() > i)
+        good_suggestion = true;
+    }
+
     // perhaps we made a typical fault of spelling
     if ((slst.size() < maxSug) && (!cpdsuggest || (slst.size() < oldSug + maxcpdsugs))) {
       size_t i = slst.size();
@@ -409,6 +418,98 @@ void SuggestMgr::capchars(std::vector<std::string>& wlst,
   testsug(wlst, candidate, cpdsuggest, NULL, NULL, info);
 }
 
+// suggestions for a broken consistent alternation (CMAP table)
+//
+// The word is split into units; a unit is the longest CMAP cell matching at
+// that position (its column is the alternating unit), otherwise one character.
+// For every start unit s and every class row r, all alternating units at or
+// after s are rewritten to row r. This yields at most
+// (number of units) x (number of rows) candidates instead of the
+// exponential search of MAP. Candidates with fewer changed units come first;
+// on a tie the shorter rewritten region (later start) wins, keeping the stem.
+int SuggestMgr::cmapchars(std::vector<std::string>& wlst,
+                          const std::string& word,
+                          int cpdsuggest,
+                          int& info) {
+  if (word.size() < 2 || !pAMgr)
+    return wlst.size();
+  const std::vector<mapentry>& table = pAMgr->get_cmaptable();
+  if (table.empty())
+    return wlst.size();
+  const size_t ncol = table.front().size();
+
+  std::vector<std::string> unit;
+  std::vector<int> col;
+  for (size_t p = 0; p < word.size();) {
+    size_t best = 0;
+    int bcol = -1;
+    for (const mapentry& row : table)
+      for (size_t c = 0; c < ncol; ++c) {
+        const std::string& m = row[c];
+        if (m.size() > best && word.compare(p, m.size(), m) == 0) {
+          best = m.size();
+          bcol = (int)c;
+        }
+      }
+    if (bcol < 0) {
+      best = 1;
+      if (utf8)
+        while (p + best < word.size() && (word[p + best] & 0xc0) == 0x80)
+          ++best;
+    }
+    unit.push_back(word.substr(p, best));
+    col.push_back(bcol);
+    p += best;
+  }
+
+  struct cmapcand {
+    int changes;
+    size_t start;
+    std::string word;
+  };
+  std::vector<cmapcand> cands;
+  for (size_t s = 0; s < unit.size(); ++s) {
+    if (col[s] < 0)
+      continue;
+    for (const mapentry& row : table) {
+      std::string cand;
+      int changes = 0;
+      for (size_t u = 0; u < unit.size(); ++u) {
+        if (u >= s && col[u] >= 0) {
+          const std::string& r = row[col[u]];
+          if (r != unit[u])
+            ++changes;
+          cand.append(r);
+        } else {
+          cand.append(unit[u]);
+        }
+      }
+      if (changes)
+        cands.push_back({changes, s, cand});
+    }
+  }
+  std::stable_sort(cands.begin(), cands.end(),
+                   [](const cmapcand& a, const cmapcand& b) {
+                     if (a.changes != b.changes)
+                       return a.changes < b.changes;
+                     return a.start > b.start;
+                   });
+
+  clock_t timelimit = clock();
+  int timer = MINTIMER;
+  for (size_t i = 0; i < cands.size() && wlst.size() < maxSug; ++i) {
+    bool seen = false;
+    for (size_t k = 0; k < i && !seen; ++k)
+      seen = cands[k].word == cands[i].word;
+    if (seen)
+      continue;
+    testsug(wlst, cands[i].word, cpdsuggest, &timer, &timelimit, info);
+    if (!timer)
+      break;
+  }
+  return wlst.size();
+}
+
 // suggestions for when chose the wrong char out of a related set
 int SuggestMgr::mapchars(std::vector<std::string>& wlst,
                          const std::string& word,
@@ -455,12 +556,14 @@ int SuggestMgr::map_related(const std::string& word,
   }
 
   int in_map = 0;
+  // the candidate prefix must be the same for every map group: the
+  // recursive calls below leave characters appended to it
+  const size_t cn = candidate.size();
   for (size_t j = 0; j < maptable.size(); ++j) {
     for (size_t k = 0; k < maptable[j].size(); ++k) {
       size_t len = maptable[j][k].size();
       if (len && word.compare(wn, len, maptable[j][k]) == 0) {
         in_map = 1;
-        size_t cn = candidate.size();
         for (size_t l = 0; l < maptable[j].size(); ++l) {
           candidate.resize(cn);
           candidate.append(maptable[j][l]);
