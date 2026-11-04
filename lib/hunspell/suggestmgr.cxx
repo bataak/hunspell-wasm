@@ -74,6 +74,7 @@
 #include <cstdio>
 #include <cctype>
 #include <ctime>
+#include <unordered_set>
 
 #include "suggestmgr.hxx"
 #include "htypes.hxx"
@@ -497,12 +498,10 @@ int SuggestMgr::cmapchars(std::vector<std::string>& wlst,
 
   clock_t timelimit = clock();
   int timer = MINTIMER;
+  std::unordered_set<std::string> tried;
   for (size_t i = 0; i < cands.size() && wlst.size() < maxSug; ++i) {
-    bool seen = false;
-    for (size_t k = 0; k < i && !seen; ++k)
-      seen = cands[k].word == cands[i].word;
-    if (seen)
-      continue;
+    if (!tried.insert(cands[i].word).second)
+      continue;  // duplicate candidate
     testsug(wlst, cands[i].word, cpdsuggest, &timer, &timelimit, info);
     if (!timer)
       break;
