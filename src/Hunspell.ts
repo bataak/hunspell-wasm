@@ -245,6 +245,41 @@ export class Hunspell {
 		}
 	}
 
+	async loadFrequenciesFromFile(frequencyFilePath: string) {
+		const { readFile } = await import('fs/promises')
+
+		const frequencies = await readFile(frequencyFilePath, 'utf-8')
+
+		return this.loadFrequenciesFromString(frequencies)
+	}
+
+	// Load a word-form frequency list (see lib/hunspell/freqrank.hxx).
+	// Afterwards getSpellingSuggestions() reranks its output by weighted
+	// edit distance and word frequency. Returns the number of entries loaded.
+	loadFrequenciesFromString(frequencies: string) {
+		this.ensureNotDisposed()
+
+		const m = this.wasmModule
+		const wasmMemory = this.wasmMemory
+
+		const frequencyVirtualFileName = `${getRandomId()}.freq`
+		const frequencyVirtualFileNameRef = wasmMemory.allocNullTerminatedUtf8String(frequencyVirtualFileName)
+
+		m.FS.writeFile(frequencyVirtualFileName, frequencies)
+
+		const entryCount: number = m._Hunspell_load_freq(this.hunspellHandle, frequencyVirtualFileNameRef.address)
+
+		m.FS.unlink(frequencyVirtualFileName)
+
+		frequencyVirtualFileNameRef.free()
+
+		if (entryCount === 0) {
+			throw new Error(`loadFrequenciesFromString failed: no entries loaded`)
+		}
+
+		return entryCount
+	}
+
 	async addDictionaryFromFile(dictionaryFilePath: string) {
 		const { readFile } = await import('fs/promises')
 

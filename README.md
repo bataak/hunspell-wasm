@@ -47,6 +47,14 @@ World
 const hunspell = await createHunspellFromStrings(affixes, dictionary)
 ```
 
+Rerank suggestions by edit distance and word frequency (optional, see `lib/hunspell/freqrank.hxx` for the file format):
+
+```ts
+hunspell.loadFrequenciesFromString(await (await fetch('dict/mn_MN.freq')).text())
+console.log(hunspell.getSpellingSuggestions('мөртлөө'))
+// Output: [ 'мөртөө', ... ]
+```
+
 Add or remove words from dictionary:
 ```ts
 hunspell.addWord('foobar')

@@ -66,6 +66,11 @@ LIBHUNSPELL_DLL_EXPORTED int Hunspell_add_dic(Hunhandle* pHunspell,
 /* spell(word) - spellcheck word
  * output: 0 = bad word, not 0 = good word
  */
+/* load a word-form frequency list used to rerank suggestions;
+ * returns the number of entries, 0 on failure */
+LIBHUNSPELL_DLL_EXPORTED int Hunspell_load_freq(Hunhandle* pHunspell,
+                                                const char* fpath);
+
 LIBHUNSPELL_DLL_EXPORTED int Hunspell_spell(Hunhandle* pHunspell, const char*);
 
 LIBHUNSPELL_DLL_EXPORTED char* Hunspell_get_dic_encoding(Hunhandle* pHunspell);

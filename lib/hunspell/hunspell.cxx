@@ -78,6 +78,7 @@
 #include "suggestmgr.hxx"
 #include "hunspell.h"
 #include "csutil.hxx"
+#include "freqrank.hxx"
 
 #include <limits>
 #include <string>
@@ -92,6 +93,7 @@ public:
   HunspellImpl& operator=(const HunspellImpl&) = delete;
   ~HunspellImpl();
   int add_dic(const char* dpath, const char* key = NULL);
+  size_t load_freq(const char* fpath);
   std::vector<std::string> suffix_suggest(const std::string& root_word);
   std::vector<std::string> generate(const std::string& word, const std::vector<std::string>& pl);
   std::vector<std::string> generate(const std::string& word, const std::string& pattern);
@@ -135,6 +137,7 @@ private:
   std::string encoding;
   struct cs_info* csconv;
   int langnum;
+  FreqRank freqrank;
   int utf8;
   int complexprefixes;
   std::vector<std::string> wordbreak;
@@ -1041,7 +1044,15 @@ std::vector<std::string> HunspellImpl::suggest(const std::string& word, std::vec
 
 std::vector<std::string> HunspellImpl::suggest(const std::string& word) {
   std::vector<std::string> suggest_candidate_stack;
-  return suggest(word, suggest_candidate_stack);
+  std::vector<std::string> slst = suggest(word, suggest_candidate_stack);
+  // optional final stage: rerank by edit distance and word frequency
+  if (utf8 && freqrank.loaded())
+    freqrank.rank(word, slst, langnum);
+  return slst;
+}
+
+size_t HunspellImpl::load_freq(const char* fpath) {
+  return freqrank.load(fpath);
 }
 
 std::vector<std::string> HunspellImpl::suggest_internal(const std::string& word,
@@ -2124,6 +2135,10 @@ std::vector<std::string> Hunspell::suggest(const std::string& word) {
   return m_Impl->suggest(word);
 }
 
+size_t Hunspell::load_freq(const char* fpath) {
+  return m_Impl->load_freq(fpath);
+}
+
 std::vector<std::string> Hunspell::suffix_suggest(const std::string& root_word) {
   return m_Impl->suffix_suggest(root_word);
 }
@@ -2264,6 +2279,10 @@ int Hunspell_spell(Hunhandle* pHunspell, const char* word) {
 
 char* Hunspell_get_dic_encoding(Hunhandle* pHunspell) {
   return reinterpret_cast<HunspellImpl*>(pHunspell)->get_dic_encoding();
+}
+
+int Hunspell_load_freq(Hunhandle* pHunspell, const char* fpath) {
+  return (int)reinterpret_cast<HunspellImpl*>(pHunspell)->load_freq(fpath);
 }
 
 int Hunspell_suggest(Hunhandle* pHunspell, char*** slst, const char* word) {

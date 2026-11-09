@@ -119,6 +119,11 @@ class LIBHUNSPELL_DLL_EXPORTED Hunspell {
   /* load extra dictionaries (only dic files) */
   int add_dic(const char* dpath, const char* key = NULL);
 
+  /* load_freq(fpath) - load a word-form frequency list; suggest() then
+   * reranks its output by weighted edit distance and frequency
+   * (see freqrank.hxx). Returns the number of entries, 0 on failure. */
+  size_t load_freq(const char* fpath);
+
   /* spell(word) - spellcheck word
    * output: false = bad word, true = good word
    *
