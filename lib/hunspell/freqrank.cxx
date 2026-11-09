@@ -152,9 +152,62 @@ double FreqRank::distance(const std::vector<unsigned short>& a,
   return at(n, m);
 }
 
+namespace {
+
+std::string lowercase(const std::string& s, int langnum) {
+  std::vector<w_char> w;
+  u8_u16(w, s);
+  for (auto& ch : w) {
+    unsigned short u = unicodetolower((unsigned short)ch, langnum);
+    ch.h = (unsigned char)(u >> 8);
+    ch.l = (unsigned char)(u & 0xff);
+  }
+  std::string r;
+  u16_u8(r, w);
+  return r;
+}
+
+}  // namespace
+
 void FreqRank::rank(const std::string& word, std::vector<std::string>& slst,
-                    int langnum) const {
+                    int langnum, const std::vector<replentry>* reptable) const {
   if (!loaded() || slst.size() < 2)
+    return;
+  // explicit whole-word REP corrections first, each group ranked on its own
+  std::vector<std::string> pinned, rest;
+  if (reptable) {
+    std::string lw = lowercase(word, langnum);
+    std::vector<std::string> outs;
+    for (const auto& r : *reptable) {
+      if (r.pattern != lw)
+        continue;
+      for (const auto& o : r.outstrings)
+        if (!o.empty())
+          outs.push_back(trim(o));
+    }
+    if (!outs.empty()) {
+      for (const auto& c : slst) {
+        if (std::find(outs.begin(), outs.end(), lowercase(c, langnum)) != outs.end())
+          pinned.push_back(c);
+        else
+          rest.push_back(c);
+      }
+    }
+  }
+  if (pinned.empty()) {
+    sort_by_score(word, slst, langnum);
+    return;
+  }
+  sort_by_score(word, pinned, langnum);
+  sort_by_score(word, rest, langnum);
+  pinned.insert(pinned.end(), rest.begin(), rest.end());
+  slst.swap(pinned);
+}
+
+void FreqRank::sort_by_score(const std::string& word,
+                             std::vector<std::string>& slst,
+                             int langnum) const {
+  if (slst.size() < 2)
     return;
   // word-form counts first: with no corpus evidence for any candidate,
   // distance alone ranks worse than Hunspell's own order, so keep it

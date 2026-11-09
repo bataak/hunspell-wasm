@@ -17,6 +17,11 @@
  * as it is: without corpus evidence the distance alone ranks worse than
  * Hunspell's stage order.
  *
+ * Suggestions produced by a REP rule whose pattern is the whole misspelled
+ * word (e.g. "REP руу$ уруу") are explicit corrections written by the
+ * dictionary author; they stay in front of all other suggestions and are
+ * only ranked among themselves.
+ *
  * The frequency file is plain UTF-8 text:
  *     # comment
  *     VOWELS аэоөуүиыеёюя      (characters treated as vowels)
@@ -40,7 +45,8 @@ class FreqRank {
   size_t load(const char* path);
   bool loaded() const { return !offsets.empty(); }
   // Reorder slst for the misspelled word (UTF-8 dictionaries only).
-  void rank(const std::string& word, std::vector<std::string>& slst, int langnum) const;
+  void rank(const std::string& word, std::vector<std::string>& slst, int langnum,
+            const std::vector<replentry>* reptable = NULL) const;
 
  private:
   std::string blob;                  // sorted words, '\0'-terminated
@@ -52,6 +58,8 @@ class FreqRank {
 
   uint32_t lookup(const std::string& w) const;
   bool is_vowel(unsigned short c) const;
+  void sort_by_score(const std::string& word, std::vector<std::string>& slst,
+                     int langnum) const;
   double distance(const std::vector<unsigned short>& a,
                   const std::vector<unsigned short>& b,
                   const std::vector<unsigned short>& al,

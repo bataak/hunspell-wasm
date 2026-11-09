@@ -1047,7 +1047,7 @@ std::vector<std::string> HunspellImpl::suggest(const std::string& word) {
   std::vector<std::string> slst = suggest(word, suggest_candidate_stack);
   // optional final stage: rerank by edit distance and word frequency
   if (utf8 && freqrank.loaded())
-    freqrank.rank(word, slst, langnum);
+    freqrank.rank(word, slst, langnum, pAMgr ? &pAMgr->get_reptable() : NULL);
   return slst;
 }
 
