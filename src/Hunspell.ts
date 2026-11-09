@@ -10,7 +10,7 @@ export async function createHunspellFromFiles(affixesFilePath: string, dictionar
 	return createHunspellFromStrings(affixes, dictionary, key)
 }
 
-export async function createHunspellFromStrings(affixes: string, dictionary: string, key?: string) {
+export async function createHunspellFromStrings(affixes: string | Uint8Array, dictionary: string | Uint8Array, key?: string) {
 	const wasmModule = await getWasmModule()
 
 	const hunspell = new Hunspell(wasmModule, affixes, dictionary, key)
@@ -26,7 +26,7 @@ export class Hunspell {
 	private hunspellHandle: number
 	private disposed = false
 
-	constructor(wasmModule: any, affixes: string, dictionary: string, key?: string) {
+	constructor(wasmModule: any, affixes: string | Uint8Array, dictionary: string | Uint8Array, key?: string) {
 		if (this.isDisposed) {
 			throw new Error(`Hunspell instance has been disposed. It cannot be re-initialized.`)
 		}
@@ -256,7 +256,7 @@ export class Hunspell {
 	// Load a word-form frequency list (see lib/hunspell/freqrank.hxx).
 	// Afterwards getSpellingSuggestions() reranks its output by weighted
 	// edit distance and word frequency. Returns the number of entries loaded.
-	loadFrequenciesFromString(frequencies: string) {
+	loadFrequenciesFromString(frequencies: string | Uint8Array) {
 		this.ensureNotDisposed()
 
 		const m = this.wasmModule
