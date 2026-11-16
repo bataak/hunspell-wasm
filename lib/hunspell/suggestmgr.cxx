@@ -244,10 +244,16 @@ bool SuggestMgr::suggest(std::vector<std::string>& slst,
     // linear-size candidate set, so it runs before the REP table
     if ((slst.size() < maxSug) && (!cpdsuggest || (slst.size() < oldSug + maxcpdsugs))) {
       size_t i = slst.size();
-      cmapchars(slst, word, cpdsuggest, info);
+      cmapchars(slst, word, cpdsuggest, info, false);
       if (slst.size() > i)
         good_suggestion = true;
     }
+
+    // a mistyped alternating unit plus the broken alternation after it:
+    // a two-edit guess, so it does not count as a good suggestion; it runs
+    // this early because the later stages often use up the time limit
+    if ((slst.size() < maxSug) && (!cpdsuggest || (slst.size() < oldSug + maxcpdsugs)))
+      cmapchars(slst, word, cpdsuggest, info, true);
 
     // perhaps we made a typical fault of spelling
     if ((slst.size() < maxSug) && (!cpdsuggest || (slst.size() < oldSug + maxcpdsugs))) {
@@ -428,10 +434,13 @@ void SuggestMgr::capchars(std::vector<std::string>& wlst,
 // (number of units) x (number of rows) candidates instead of the
 // exponential search of MAP. Candidates with fewer changed units come first;
 // on a tie the shorter rewritten region (later start) wins, keeping the stem.
+// With cross set, one unit also changes its column within its row (see
+// below).
 int SuggestMgr::cmapchars(std::vector<std::string>& wlst,
                           const std::string& word,
                           int cpdsuggest,
-                          int& info) {
+                          int& info,
+                          bool cross) {
   if (word.size() < 2 || !pAMgr)
     return wlst.size();
   const std::vector<mapentry>& table = pAMgr->get_cmaptable();
@@ -468,26 +477,45 @@ int SuggestMgr::cmapchars(std::vector<std::string>& wlst,
     size_t start;
     std::string word;
   };
+  // with cross set, unit s itself was mistyped with another column of its
+  // own row (e.g. the stem vowel): it takes every other cell of its row(s)
+  // and the alternating units after s are rewritten to every row
+  std::vector<std::string> heads;
   std::vector<cmapcand> cands;
   for (size_t s = 0; s < unit.size(); ++s) {
     if (col[s] < 0)
       continue;
-    for (const mapentry& row : table) {
-      std::string cand;
-      int changes = 0;
-      for (size_t u = 0; u < unit.size(); ++u) {
-        if (u >= s && col[u] >= 0) {
-          const std::string& r = row[col[u]];
-          if (r != unit[u])
-            ++changes;
-          cand.append(r);
-        } else {
-          cand.append(unit[u]);
-        }
-      }
-      if (changes)
-        cands.push_back({changes, s, cand});
+    heads.clear();
+    if (cross) {
+      if (col[s] > 1)
+        continue;
+      for (const mapentry& own : table)
+        if (own[col[s]] == unit[s])
+          for (size_t c = 0; c < 2 && c < ncol; ++c)
+            if (own[c] != unit[s])
+              heads.push_back(own[c]);
+    } else {
+      heads.push_back(std::string());
     }
+    for (const std::string& head : heads)
+      for (const mapentry& row : table) {
+        std::string cand;
+        int changes = cross ? 1 : 0;
+        for (size_t u = 0; u < unit.size(); ++u) {
+          if (cross && u == s) {
+            cand.append(head);
+          } else if (u >= s && col[u] >= 0) {
+            const std::string& r = row[col[u]];
+            if (r != unit[u])
+              ++changes;
+            cand.append(r);
+          } else {
+            cand.append(unit[u]);
+          }
+        }
+        if (changes)
+          cands.push_back({changes, s, cand});
+      }
   }
   std::stable_sort(cands.begin(), cands.end(),
                    [](const cmapcand& a, const cmapcand& b) {
