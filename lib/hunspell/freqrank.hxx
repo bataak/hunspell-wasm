@@ -26,6 +26,15 @@
  *     # comment
  *     VOWELS аэоөуүиыеёюя      (characters treated as vowels)
  *     LAMBDA 0.5               (optional, default 0.5)
+ *     CAP 4                    (optional: log(f+1) is capped at this value,
+ *                               so frequency cannot outweigh a whole edit)
+ *     FLOOR 20                 (optional: counts below this are raised to it,
+ *                               treating rare forms like unseen ones;
+ *                               with no candidate at or above it the list
+ *                               keeps Hunspell's order)
+ *     TRANS 0.75               (optional: transposition cost, default 1)
+ *     PAIRS 0.5 дт зс          (optional: cost of substituting the two
+ *                               consonants of each pair, default 1.5)
  *     word<TAB>count           (one surface form per line, lowercase)
  *
  * Nothing changes unless a frequency file is loaded.
@@ -53,11 +62,17 @@ class FreqRank {
   std::vector<uint32_t> offsets;     // start of each word in blob
   std::vector<uint32_t> counts;      // frequency of each word
   std::vector<unsigned short> vowels;  // sorted UTF-16 code units
+  std::vector<std::pair<unsigned short, unsigned short> > pairs;
   double lambda = 0.5;
+  double logcap = -1.0;
+  double floor_count = 0.0;
+  double trans_cost = 1.0;
+  double pair_cost = 1.5;
   double logden = 0.0;               // log(N + V)
 
   uint32_t lookup(const std::string& w) const;
   bool is_vowel(unsigned short c) const;
+  bool is_pair(unsigned short a, unsigned short b) const;
   void sort_by_score(const std::string& word, std::vector<std::string>& slst,
                      int langnum) const;
   double distance(const std::vector<unsigned short>& a,

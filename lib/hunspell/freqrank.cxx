@@ -39,7 +39,8 @@ size_t FreqRank::load(const char* path) {
     return 0;
   std::vector<std::pair<std::string, uint32_t> > entries;
   std::vector<unsigned short> vw;
-  double lam = 0.5;
+  std::vector<std::pair<unsigned short, unsigned short> > pr;
+  double lam = 0.5, cap = -1.0, floor_n = 0.0, trans = 1.0, pcost = 1.5;
   std::string line;
   char buf[4096];
   bool ok = true;
@@ -57,6 +58,28 @@ size_t FreqRank::load(const char* path) {
         vw = to_u16(trim(line.substr(7)));
       } else if (line.compare(0, 7, "LAMBDA ") == 0) {
         lam = atof(line.c_str() + 7);
+      } else if (line.compare(0, 4, "CAP ") == 0) {
+        cap = atof(line.c_str() + 4);
+      } else if (line.compare(0, 6, "FLOOR ") == 0) {
+        floor_n = atof(line.c_str() + 6);
+      } else if (line.compare(0, 6, "TRANS ") == 0) {
+        trans = atof(line.c_str() + 6);
+      } else if (line.compare(0, 6, "PAIRS ") == 0) {
+        std::string rest = trim(line.substr(6));
+        size_t sp = rest.find_first_of(" \t");
+        pcost = atof(rest.substr(0, sp).c_str());
+        pr.clear();
+        while (sp != std::string::npos) {
+          size_t b = rest.find_first_not_of(" \t", sp);
+          if (b == std::string::npos)
+            break;
+          sp = rest.find_first_of(" \t", b);
+          std::vector<unsigned short> u = to_u16(rest.substr(b, sp == std::string::npos ? std::string::npos : sp - b));
+          if (u.size() == 2) {
+            pr.emplace_back(u[0], u[1]);
+            pr.emplace_back(u[1], u[0]);
+          }
+        }
       }
       continue;
     }
@@ -98,7 +121,13 @@ size_t FreqRank::load(const char* path) {
   }
   std::sort(vw.begin(), vw.end());
   vowels.swap(vw);
+  std::sort(pr.begin(), pr.end());
+  pairs.swap(pr);
   lambda = lam;
+  logcap = cap;
+  floor_count = floor_n;
+  trans_cost = trans;
+  pair_cost = pcost;
   logden = std::log(total + (double)k);
   return k;
 }
@@ -122,6 +151,10 @@ bool FreqRank::is_vowel(unsigned short c) const {
   return std::binary_search(vowels.begin(), vowels.end(), c);
 }
 
+bool FreqRank::is_pair(unsigned short a, unsigned short b) const {
+  return std::binary_search(pairs.begin(), pairs.end(), std::make_pair(a, b));
+}
+
 // Weighted optimal string alignment distance (see freqrank.hxx).
 // Vowel classes are tested on lowercased characters; equality is exact.
 double FreqRank::distance(const std::vector<unsigned short>& a,
@@ -140,12 +173,17 @@ double FreqRank::distance(const std::vector<unsigned short>& a,
       double sub = 0.0;
       if (a[i - 1] != b[j - 1]) {
         bool va = is_vowel(al[i - 1]), vb = is_vowel(bl[j - 1]);
-        sub = (va && vb) ? 0.5 : ((!va && !vb) ? 1.5 : 1.0);
+        if (va && vb)
+          sub = 0.5;
+        else if (va || vb)
+          sub = 1.0;
+        else
+          sub = is_pair(al[i - 1], bl[j - 1]) ? pair_cost : 1.5;
       }
       double v = std::min(std::min(at(i - 1, j) + 1.0, at(i, j - 1) + 1.0),
                           at(i - 1, j - 1) + sub);
       if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1])
-        v = std::min(v, at(i - 2, j - 2) + 1.0);
+        v = std::min(v, at(i - 2, j - 2) + trans_cost);
       at(i, j) = v;
     }
   }
@@ -224,7 +262,7 @@ void FreqRank::sort_by_score(const std::string& word,
     std::string lower;
     u16_u8(lower, lw);
     cnt[i] = lookup(lower);
-    if (cnt[i])
+    if (cnt[i] && (double)cnt[i] >= floor_count)
       evidence = true;
   }
   if (!evidence)
@@ -240,7 +278,10 @@ void FreqRank::sort_by_score(const std::string& word,
     for (auto& ch : cl) ch = unicodetolower(ch, langnum);
     for (auto& ch : xl) ch = unicodetolower(ch, langnum);
     double d = distance(c, x, cl, xl);
-    double lp = std::log((double)cnt[i] + 1.0) - logden;
+    double lc = std::log(std::max((double)cnt[i], floor_count) + 1.0);
+    if (logcap >= 0.0)
+      lc = std::min(lc, logcap);
+    double lp = lc - logden;
     score.emplace_back(d - lambda * lp, i);
   }
   std::stable_sort(score.begin(), score.end(),
