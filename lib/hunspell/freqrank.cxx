@@ -271,6 +271,7 @@ void FreqRank::sort_by_score(const std::string& word,
   std::vector<unsigned short> x = to_u16(word);
   std::vector<std::pair<double, size_t> > score;
   score.reserve(slst.size());
+  std::vector<double> eff(slst.size());
   for (size_t i = 0; i < slst.size(); ++i) {
     std::vector<unsigned short> c = to_u16(slst[i]);
     // vowel test uses lowercase; keep exact characters for equality
@@ -278,15 +279,20 @@ void FreqRank::sort_by_score(const std::string& word,
     for (auto& ch : cl) ch = unicodetolower(ch, langnum);
     for (auto& ch : xl) ch = unicodetolower(ch, langnum);
     double d = distance(c, x, cl, xl);
-    double lc = std::log(std::max((double)cnt[i], floor_count) + 1.0);
+    eff[i] = std::max((double)cnt[i], floor_count);
+    double lc = std::log(eff[i] + 1.0);
     if (logcap >= 0.0)
       lc = std::min(lc, logcap);
     double lp = lc - logden;
     score.emplace_back(d - lambda * lp, i);
   }
   std::stable_sort(score.begin(), score.end(),
-                   [](const std::pair<double, size_t>& p,
-                      const std::pair<double, size_t>& q) { return p.first < q.first; });
+                   [&eff](const std::pair<double, size_t>& p,
+                          const std::pair<double, size_t>& q) {
+                     if (p.first != q.first)
+                       return p.first < q.first;
+                     return eff[p.second] > eff[q.second];
+                   });
   std::vector<std::string> out;
   out.reserve(slst.size());
   for (const auto& s : score)
