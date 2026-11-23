@@ -20,7 +20,10 @@
  * Suggestions produced by a REP rule whose pattern is the whole misspelled
  * word (e.g. "REP руу$ уруу") are explicit corrections written by the
  * dictionary author; they stay in front of all other suggestions and are
- * only ranked among themselves.
+ * only ranked among themselves.  With REPCOST set, a candidate obtained by
+ * applying one specific REP rule to the misspelled word (pattern of at
+ * least REPMIN characters, or anchored with ^ or $) has its distance
+ * lowered to REPCOST, so the author's rules survive frequency ranking.
  *
  * The frequency file is plain UTF-8 text:
  *     # comment
@@ -35,6 +38,11 @@
  *     TRANS 0.75               (optional: transposition cost, default 1)
  *     PAIRS 0.5 дт зс          (optional: cost of substituting the two
  *                               consonants of each pair, default 1.5)
+ *     REPCOST 0.4              (optional: distance of a candidate made by
+ *                               one specific REP rule; off by default)
+ *     REPMIN 3                 (optional: shortest unanchored REP pattern,
+ *                               in characters, that counts as specific;
+ *                               default 3)
  *     word<TAB>count           (one surface form per line, lowercase)
  *
  * Nothing changes unless a frequency file is loaded.
@@ -68,13 +76,17 @@ class FreqRank {
   double floor_count = 0.0;
   double trans_cost = 1.0;
   double pair_cost = 1.5;
+  double rep_cost = -1.0;
+  size_t rep_min = 3;
   double logden = 0.0;               // log(N + V)
 
   uint32_t lookup(const std::string& w) const;
   bool is_vowel(unsigned short c) const;
   bool is_pair(unsigned short a, unsigned short b) const;
   void sort_by_score(const std::string& word, std::vector<std::string>& slst,
-                     int langnum) const;
+                     int langnum, const std::vector<std::string>& repouts) const;
+  std::vector<std::string> rep_outputs(const std::string& lw,
+                                       const std::vector<replentry>* reptable) const;
   double distance(const std::vector<unsigned short>& a,
                   const std::vector<unsigned short>& b,
                   const std::vector<unsigned short>& al,

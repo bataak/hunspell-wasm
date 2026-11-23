@@ -41,6 +41,8 @@ size_t FreqRank::load(const char* path) {
   std::vector<unsigned short> vw;
   std::vector<std::pair<unsigned short, unsigned short> > pr;
   double lam = 0.5, cap = -1.0, floor_n = 0.0, trans = 1.0, pcost = 1.5;
+  double rcost = -1.0;
+  long rmin = 3;
   std::string line;
   char buf[4096];
   bool ok = true;
@@ -64,6 +66,10 @@ size_t FreqRank::load(const char* path) {
         floor_n = atof(line.c_str() + 6);
       } else if (line.compare(0, 6, "TRANS ") == 0) {
         trans = atof(line.c_str() + 6);
+      } else if (line.compare(0, 8, "REPCOST ") == 0) {
+        rcost = atof(line.c_str() + 8);
+      } else if (line.compare(0, 7, "REPMIN ") == 0) {
+        rmin = atol(line.c_str() + 7);
       } else if (line.compare(0, 6, "PAIRS ") == 0) {
         std::string rest = trim(line.substr(6));
         size_t sp = rest.find_first_of(" \t");
@@ -128,6 +134,8 @@ size_t FreqRank::load(const char* path) {
   floor_count = floor_n;
   trans_cost = trans;
   pair_cost = pcost;
+  rep_cost = rcost;
+  rep_min = rmin < 0 ? 0 : (size_t)rmin;
   logden = std::log(total + (double)k);
   return k;
 }
@@ -232,24 +240,60 @@ void FreqRank::rank(const std::string& word, std::vector<std::string>& slst,
       }
     }
   }
+  std::vector<std::string> repouts;
+  if (rep_cost >= 0.0)
+    repouts = rep_outputs(lowercase(word, langnum), reptable);
   if (pinned.empty()) {
-    sort_by_score(word, slst, langnum);
+    sort_by_score(word, slst, langnum, repouts);
     return;
   }
-  sort_by_score(word, pinned, langnum);
-  sort_by_score(word, rest, langnum);
+  sort_by_score(word, pinned, langnum, repouts);
+  sort_by_score(word, rest, langnum, repouts);
   pinned.insert(pinned.end(), rest.begin(), rest.end());
   slst.swap(pinned);
 }
 
+std::vector<std::string> FreqRank::rep_outputs(
+    const std::string& lw, const std::vector<replentry>* reptable) const {
+  std::vector<std::string> outs;
+  if (!reptable)
+    return outs;
+  for (const auto& r : *reptable) {
+    if (r.pattern.empty() || r.pattern.size() > lw.size())
+      continue;
+    bool longpat = to_u16(r.pattern).size() >= rep_min;
+    for (int t = 0; t < 4; ++t) {
+      const std::string& o = r.outstrings[t];
+      if (o.empty() || (t == 0 && !longpat))
+        continue;
+      const size_t n = r.pattern.size(), last = lw.size() - n;
+      if (t == 0) {
+        for (size_t pos = lw.find(r.pattern); pos != std::string::npos;
+             pos = lw.find(r.pattern, pos + 1))
+          outs.push_back(lw.substr(0, pos) + o + lw.substr(pos + n));
+        continue;
+      }
+      size_t pos = t == 2 ? last : 0;
+      if ((t == 3 && last != 0) || lw.compare(pos, n, r.pattern) != 0)
+        continue;
+      outs.push_back(lw.substr(0, pos) + o + lw.substr(pos + n));
+    }
+  }
+  std::sort(outs.begin(), outs.end());
+  outs.erase(std::unique(outs.begin(), outs.end()), outs.end());
+  return outs;
+}
+
 void FreqRank::sort_by_score(const std::string& word,
                              std::vector<std::string>& slst,
-                             int langnum) const {
+                             int langnum,
+                             const std::vector<std::string>& repouts) const {
   if (slst.size() < 2)
     return;
   // word-form counts first: with no corpus evidence for any candidate,
   // distance alone ranks worse than Hunspell's own order, so keep it
   std::vector<uint32_t> cnt(slst.size());
+  std::vector<bool> isrep(slst.size(), false);
   bool evidence = false;
   for (size_t i = 0; i < slst.size(); ++i) {
     std::vector<w_char> lw;
@@ -262,6 +306,8 @@ void FreqRank::sort_by_score(const std::string& word,
     std::string lower;
     u16_u8(lower, lw);
     cnt[i] = lookup(lower);
+    if (std::binary_search(repouts.begin(), repouts.end(), lower))
+      isrep[i] = true;
     if (cnt[i] && (double)cnt[i] >= floor_count)
       evidence = true;
   }
@@ -279,6 +325,8 @@ void FreqRank::sort_by_score(const std::string& word,
     for (auto& ch : cl) ch = unicodetolower(ch, langnum);
     for (auto& ch : xl) ch = unicodetolower(ch, langnum);
     double d = distance(c, x, cl, xl);
+    if (isrep[i] && d > rep_cost)
+      d = rep_cost;
     eff[i] = std::max((double)cnt[i], floor_count);
     double lc = std::log(eff[i] + 1.0);
     if (logcap >= 0.0)
